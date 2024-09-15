@@ -1,13 +1,9 @@
 [package]
-name = "riff"
+name = "longriff"
 version = "2.0.0"
-authors = ["Francesco Bertolaccini <francesco@bertolaccini.dev>"]
-description = "This crate provides utilities for reading and writing RIFF formatted files"
-repository = "https://github.com/frabert/riff"
+authors = ["Bill Kudo <bluesky42624@gmail.com>", "Francesco Bertolaccini <francesco@bertolaccini.dev>"]
+description = "This crate provides utilities for reading and writing LONGRIFF formatted files"
+repository = "https://github.com/Bill13579/longriff"
 readme = "README.md"
 license = "MIT"
-edition = "2018"
-
-[badges]
-travis-ci = { repository = "frabert/riff" }
-codecov = { repository = "frabert/riff" }
+edition = "2021"

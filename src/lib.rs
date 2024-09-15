@@ -1,7 +1,7 @@
-//! # riff
+//! # longriff
 //! 
-//! `riff` provides utility methods for reading and writing RIFF-formatted files,
-//! such as Microsoft Wave, AVI or DLS files.
+//! This crate provides utility methods for reading and writing in the LONGRIFF format,
+//! which is RIFF but everywhere we use 4 bytes we use 8 bytes instead.
 
 use std::fmt;
 use std::io::Read;
@@ -10,28 +10,28 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::convert::TryInto;
 
-/// A chunk id, also known as FourCC
+/// A chunk id, also known as EightCC
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct ChunkId {
   /// The raw bytes of the id
-  pub value: [u8; 4]
+  pub value: [u8; 8]
 }
 
-/// The `RIFF` id
-pub static RIFF_ID: ChunkId = ChunkId { value: [0x52, 0x49, 0x46, 0x46] };
+/// The `LONGRIFF` id
+pub static LONGRIFF_ID: ChunkId = ChunkId { value: [0x4C, 0x4F, 0x4E, 0x47, 0x52, 0x49, 0x46, 0x46] };
 
-/// The `LIST` id
-pub static LIST_ID: ChunkId = ChunkId { value: [0x4C, 0x49, 0x53, 0x54] };
+/// The `LIST    ` id
+pub static LIST_ID: ChunkId = ChunkId { value: [0x4C, 0x49, 0x53, 0x54, 0x20, 0x20, 0x20, 0x20] };
 
-/// The `seqt` id
-pub static SEQT_ID: ChunkId = ChunkId { value: [0x73, 0x65, 0x71, 0x74] };
+/// The `seqt    ` id
+pub static SEQT_ID: ChunkId = ChunkId { value: [0x73, 0x65, 0x71, 0x74, 0x20, 0x20, 0x20, 0x20] };
 
 impl ChunkId {
   /// Returns the value of the id as a string.
   /// 
   /// # Examples
   /// ```
-  /// assert_eq!(riff::RIFF_ID.as_str(), "RIFF");
+  /// assert_eq!(longriff::LONGRIFF_ID.as_str(), "LONGRIFF");
   /// ```
   /// 
   /// # Panics
@@ -47,7 +47,7 @@ impl ChunkId {
   /// # use std::error::Error;
   /// #
   /// # fn try_main() -> Result<(), Box<Error>> {
-  /// let chunk_id = riff::ChunkId::new("RIFF")?;
+  /// let chunk_id = riff::ChunkId::new("LONGRIFF")?;
   /// #   Ok(())
   /// # }
   /// #
@@ -57,13 +57,13 @@ impl ChunkId {
   /// ```
   /// 
   /// # Errors
-  /// The function fails when the string's length in bytes is not exactly 4.
+  /// The function fails when the string's length in bytes is not exactly 8.
   pub fn new(s: &str) -> Result<ChunkId, &str> {
     let bytes = s.as_bytes();
-    if bytes.len() != 4 {
+    if bytes.len() != 8 {
       Err("Invalid length")
     } else {
-      let mut a: [u8; 4] = Default::default();
+      let mut a: [u8; 8] = Default::default();
       a.copy_from_slice(&bytes[..]);
       Ok(ChunkId { value: a })
     }
@@ -94,12 +94,12 @@ impl ChunkContents {
       where T: Seek + Write {
     match &self {
       &ChunkContents::Data(id, data) => {
-        if data.len() as u64 > u32::MAX as u64 {
+        if data.len() as u64 > u64::MAX {
           use std::io::{Error, ErrorKind};
           return Err(Error::new(ErrorKind::InvalidData, "Data too big"));
         }
 
-        let len = data.len() as u32;
+        let len = data.len() as u64;
         writer.write_all(&id.value)?;
         writer.write_all(&len.to_le_bytes())?;
         writer.write_all(&data)?;
@@ -107,52 +107,52 @@ impl ChunkContents {
           let single_byte: [u8; 1] = [0];
           writer.write_all(&single_byte)?;
         }
-        Ok((8 + len + (len % 2)).into())
+        Ok((16 + len + (len % 2)).into())
       }
       &ChunkContents::Children(id, chunk_type, children) => {
         writer.write_all(&id.value)?;
         let len_pos = writer.seek(SeekFrom::Current(0))?;
-        let zeros: [u8; 4] = [0, 0, 0, 0];
+        let zeros: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
         writer.write_all(&zeros)?;
         writer.write_all(&chunk_type.value)?;
-        let mut total_len: u64 = 4;
+        let mut total_len: u64 = 8;
         for child in children {
           total_len = total_len + child.write(writer)?;
         }
 
-        if total_len > u32::MAX as u64 {
+        if total_len > u64::MAX {
           use std::io::{Error, ErrorKind};
           return Err(Error::new(ErrorKind::InvalidData, "Data too big"));
         }
 
         let end_pos = writer.seek(SeekFrom::Current(0))?;
         writer.seek(SeekFrom::Start(len_pos))?;
-        writer.write_all(&(total_len as u32).to_le_bytes())?;
+        writer.write_all(&total_len.to_le_bytes())?;
         writer.seek(SeekFrom::Start(end_pos))?;
 
-        Ok((8 + total_len + (total_len % 2)).into())
+        Ok((16 + total_len + (total_len % 2)).into())
       }
       &ChunkContents::ChildrenNoType(id, children) => {
         writer.write_all(&id.value)?;
         let len_pos = writer.seek(SeekFrom::Current(0))?;
-        let zeros: [u8; 4] = [0, 0, 0, 0];
+        let zeros: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
         writer.write_all(&zeros)?;
         let mut total_len: u64 = 0;
         for child in children {
           total_len = total_len + child.write(writer)?;
         }
 
-        if total_len > u32::MAX as u64 {
+        if total_len > u64::MAX {
           use std::io::{Error, ErrorKind};
           return Err(Error::new(ErrorKind::InvalidData, "Data too big"));
         }
 
         let end_pos = writer.seek(SeekFrom::Current(0))?;
         writer.seek(SeekFrom::Start(len_pos))?;
-        writer.write_all(&(total_len as u32).to_le_bytes())?;
+        writer.write_all(&total_len.to_le_bytes())?;
         writer.seek(SeekFrom::Start(end_pos))?;
 
-        Ok((8 + total_len + (total_len % 2)).into())
+        Ok((16 + total_len + (total_len % 2)).into())
       }
     }
   }
@@ -163,7 +163,7 @@ impl ChunkContents {
 pub struct Chunk {
   pos: u64,
   id: ChunkId,
-  len: u32,
+  len: u64,
 }
 
 /// An iterator over the children of a `Chunk`
@@ -187,8 +187,8 @@ impl<'a, T> Iterator for Iter<'a, T>
         Ok(chunk) => chunk,
         Err(err) => return Some(Err(err)),
     };
-    let len = chunk.len() as u64;
-    self.cur = self.cur + len + 8 + (len % 2);
+    let len = chunk.len();
+    self.cur = self.cur + len + 16 + (len % 2);
     Some(Ok(chunk))
   }
 }
@@ -200,7 +200,7 @@ impl Chunk {
   }
 
   /// Returns the number of bytes in this chunk.
-  pub fn len(&self) -> u32 {
+  pub fn len(&self) -> u64 {
     self.len
   }
 
@@ -211,15 +211,15 @@ impl Chunk {
 
   /// Reads the chunk type of this chunk.
   /// 
-  /// Generally only valid for `RIFF` and `LIST` chunks.
+  /// Generally only valid for `LONGRIFF` and `LIST    ` chunks.
   pub fn read_type<T>(&self, stream: &mut T) -> std::io::Result<ChunkId>
       where T: Read + Seek {
-    stream.seek(SeekFrom::Start(self.pos + 8))?;
+    stream.seek(SeekFrom::Start(self.pos + 16))?;
 
-    let mut fourcc : [u8; 4] = [0; 4];
-    stream.read_exact(&mut fourcc)?;
+    let mut eightcc : [u8; 8] = [0; 8];
+    stream.read_exact(&mut eightcc)?;
 
-    Ok(ChunkId { value: fourcc })
+    Ok(ChunkId { value: eightcc })
   }
 
   /// Reads a chunk from the specified position in the stream.
@@ -227,23 +227,23 @@ impl Chunk {
       where T: Read + Seek {
     stream.seek(SeekFrom::Start(pos))?;
 
-    let mut fourcc : [u8; 4] = [0; 4];
-    stream.read_exact(&mut fourcc)?;
+    let mut eightcc : [u8; 8] = [0; 8];
+    stream.read_exact(&mut eightcc)?;
 
-    let mut len : [u8; 4] = [0; 4];
+    let mut len : [u8; 8] = [0; 8];
     stream.read_exact(&mut len)?;
 
     Ok(Chunk {
       pos: pos,
-      id: ChunkId { value: fourcc },
-      len: u32::from_le_bytes(len)
+      id: ChunkId { value: eightcc },
+      len: u64::from_le_bytes(len)
     })
   }
   
   /// Reads the entirety of the contents of a chunk.
   pub fn read_contents<T>(&self, stream: &mut T) -> std::io::Result<Vec<u8>>
       where T: Read + Seek {
-    stream.seek(SeekFrom::Start(self.pos + 8))?;
+    stream.seek(SeekFrom::Start(self.pos + 16))?;
 
     let mut data: Vec<u8> = vec![0; self.len.try_into().unwrap()];
     stream.read_exact(&mut data)?;
@@ -254,12 +254,12 @@ impl Chunk {
   /// Returns an iterator over the children of the chunk.
   /// 
   /// If the chunk has children but is noncompliant, e.g. it has
-  /// no type identifier (like `seqt` chunks), use `iter_no_type` instead.
+  /// no type identifier (like `seqt    ` chunks), use `iter_no_type` instead.
   pub fn iter<'a, T>(&self, stream: &'a mut T) -> Iter<'a, T>
       where T: Seek + Read {
         Iter {
-      cur: self.pos + 12,
-      end: self.pos + 4 + (self.len as u64),
+      cur: self.pos + 24,
+      end: self.pos + 8 + self.len,
       stream: stream
     }
   }
@@ -270,8 +270,8 @@ impl Chunk {
   pub fn iter_no_type<'a, T>(&self, stream: &'a mut T) -> Iter<'a, T>
       where T: Seek + Read {
         Iter {
-      cur: self.pos + 8,
-      end: self.pos + 4 + (self.len as u64),
+      cur: self.pos + 16,
+      end: self.pos + 8 + self.len,
       stream: stream
     }
   }
@@ -283,12 +283,12 @@ mod tests {
 
     #[test]
     fn chunkid_from_str() {
-        assert_eq!(ChunkId::new("RIFF").unwrap(), RIFF_ID);
-        assert_eq!(ChunkId::new("LIST").unwrap(), LIST_ID);
-        assert_eq!(ChunkId::new("seqt").unwrap(), SEQT_ID);
+        assert_eq!(ChunkId::new("LONGRIFF").unwrap(), LONGRIFF_ID);
+        assert_eq!(ChunkId::new("LIST    ").unwrap(), LIST_ID);
+        assert_eq!(ChunkId::new("seqt    ").unwrap(), SEQT_ID);
 
-        assert_eq!(ChunkId::new("123 ").unwrap(),
-          ChunkId { value: [0x31, 0x32, 0x33, 0x20] });
+        assert_eq!(ChunkId::new("123     ").unwrap(),
+          ChunkId { value: [0x31, 0x32, 0x33, 0x20, 0x20, 0x20, 0x20, 0x20] });
 
         assert_eq!(ChunkId::new("123"), Err("Invalid length"));
         assert_eq!(ChunkId::new("12345"), Err("Invalid length"));
@@ -296,20 +296,20 @@ mod tests {
 
     #[test]
     fn chunkid_to_str() {
-      assert_eq!(RIFF_ID.as_str(), "RIFF");
-      assert_eq!(LIST_ID.as_str(), "LIST");
-      assert_eq!(SEQT_ID.as_str(), "seqt");
-      assert_eq!(ChunkId::new("123 ").unwrap().as_str(), "123 ");
+      assert_eq!(LONGRIFF_ID.as_str(), "LONGRIFF");
+      assert_eq!(LIST_ID.as_str(), "LIST    ");
+      assert_eq!(SEQT_ID.as_str(), "seqt    ");
+      assert_eq!(ChunkId::new("123     ").unwrap().as_str(), "123     ");
     }
 
     #[test]
     fn chunkid_format() {
-      assert_eq!(format!("{}", RIFF_ID), "'RIFF'");
-      assert_eq!(format!("{}", LIST_ID), "'LIST'");
-      assert_eq!(format!("{}", SEQT_ID), "'seqt'");
+      assert_eq!(format!("{}", LONGRIFF_ID), "'LONGRIFF'");
+      assert_eq!(format!("{}", LIST_ID), "'LIST    '");
+      assert_eq!(format!("{}", SEQT_ID), "'seqt    '");
 
-      assert_eq!(format!("{:?}", RIFF_ID), "'RIFF'");
-      assert_eq!(format!("{:?}", LIST_ID), "'LIST'");
-      assert_eq!(format!("{:?}", SEQT_ID), "'seqt'");
+      assert_eq!(format!("{:?}", LONGRIFF_ID), "'LONGRIFF'");
+      assert_eq!(format!("{:?}", LIST_ID), "'LIST    '");
+      assert_eq!(format!("{:?}", SEQT_ID), "'seqt    '");
     }
 }
