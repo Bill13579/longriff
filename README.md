@@ -5,7 +5,7 @@
 This crate provides utility methods for reading and writing in the LONGRIFF format,
 which is RIFF but everywhere we use 4 bytes we use 8 bytes instead.
 
-Forked from frabert/riff.
+Forked from [frabert/riff](https://github.com/frabert/riff).
 
 ### Examples
 

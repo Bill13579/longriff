@@ -1,6 +1,6 @@
 [package]
 name = "longriff"
-version = "2.0.0"
+version = "1.0.0"
 authors = ["Bill Kudo <bluesky42624@gmail.com>", "Francesco Bertolaccini <francesco@bertolaccini.dev>"]
 description = "This crate provides utilities for reading and writing LONGRIFF formatted files"
 repository = "https://github.com/Bill13579/longriff"
